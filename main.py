@@ -5,20 +5,34 @@ from datetime import datetime, timedelta
 from os import listdir
 from os.path import isfile, join
 
-time.sleep(60)
 
-bot_token = '***************************'
+
+bot_token = ''
+bot_chatID = ''
+bot_chatID2 = ''
 time_cycle_ms = 5
 oldMsg = ''
 IP_NodeM = ''
 status_read = True
 hora_prende_termo = ''
 hora_apaga_termo = ''
-
+commandNot = False
 
 def bot_send_text(chat_id, token,bot_message):
-    send_text = 'https://api.telegram.org/bot' + token + '/sendMessage?chat_id=' + chat_id + '&parse_mode=Markdown&text=' + bot_message
-    response = requests.post(send_text)
+    send_text = f'https://api.telegram.org/bot{token}/sendMessage?chat_id={chat_id}&parse_mode=Markdown&text={bot_message}'
+    try:
+        response = requests.post(send_text)
+    except:
+        print('Fallo el envio del mensaje')
+        return 'Fallo el envio del mensaje'
+    return response.json()
+
+def bot_send_photo(chat_id, token):
+    file_opened = open("/home/pi/jupyterLab/TermoBot/no_entendi.png", 'rb')
+    method = "/sendPhoto"
+    params = {'chat_id': chat_id}
+    files = {'photo': file_opened}
+    response = requests.post(f'https://api.telegram.org/bot{token}{method}', params, files=files)
     return response.json()
 
 def bot_get_mens(token):
@@ -46,14 +60,23 @@ def bot_get_mens(token):
     
     
 def prender_termo(IP_NodeM):
-    r = requests.get(f'http://{IP_NodeM}/TERMO=ON')
-    msg = "Termotanque prendido"
-    return msg
+    try:
+        r = requests.get(f'http://{IP_NodeM}/TERMO=ON')
+        msg = "Termotanque prendido"
+        return msg
+    except:
+        print('Fallo prender el termo')
+        return 'Fallo prender el termo'
 
 def apagar_termo(IP_NodeM):
-    r = requests.get(f'http://{IP_NodeM}/TERMO=OFF')
-    msg = "Termotanque apagado"
-    return msg
+    try:
+        r = requests.get(f'http://{IP_NodeM}/TERMO=OFF')
+        msg = "Termotanque apagado"
+        return msg
+    except:
+        print('Fallo apagar el termo')
+        return 'Fallo apagar el termo' 
+    
 
 def tutorial():
     msg = """
@@ -70,38 +93,52 @@ La hora que se apaga y la que se prende tienen un intervalo de 10min donde los c
     return msg
 
 def status_termo(IP_NodeM, horaInicio, horaApago):
-    msg = ''
-    x = requests.get(f'http://{IP_NodeM}/')
-    if "Termo esta: Prendido" in x.text:
-        msg = f"""
+    try:
+        msg = ''
+        x = requests.get(f'http://{IP_NodeM}/')
+        if "Termo esta: Prendido" in x.text:
+            msg = f"""
 El termo esta prendido
 Se prende a las {str(horaInicio.strftime("%H:%M"))}
 Se apaga a las {str(horaApago.strftime("%H:%M"))}
 """
-    if "Termo esta: Apagado" in x.text:
-        msg = f"""
+        if "Termo esta: Apagado" in x.text:
+            msg = f"""
 El termo esta apagado
 Se prende a las {str(horaInicio.strftime("%H:%M"))}
 Se apaga a las {str(horaApago.strftime("%H:%M"))}
 """
-    return msg
+        return msg
+    except:
+        print('No se pudo conectar con el termo')
+        return 'No se pudo conectar con el termo'
+        
 
     
 
 def save_file_conf(mensaje, horaPrende, horaApaga, force_on):
-    data_store = {'mensaje_file' : mensaje, 'hora_prende_file' : horaPrende, 'hora_apaga_file': horaApaga, 'force_on_file': force_on}
-    file_store = open("/home/pi/jupyterLab/TermoBot/BotTermoConf.tt", "wb") 
-    pickle.dump(data_store, file_store)
-    file_store.close
-    
-    return 'Datos guardados'
+    try:
+        data_store = {'mensaje_file' : mensaje, 'hora_prende_file' : horaPrende, 'hora_apaga_file': horaApaga, 'force_on_file': force_on}
+        file_store = open("/home/pi/jupyterLab/TermoBot/BotTermoConf.tt", "wb") 
+        pickle.dump(data_store, file_store)
+        file_store.close
+
+        return 'Datos guardados'
+    except:
+        print('Fallo guardar los datos')
+        return 'Fallo guardar los datos'
+        
     
 def load_file_conf():
-    file_store = open("/home/pi/jupyterLab/TermoBot/BotTermoConf.tt", "rb") 
-    restore_data = pickle.load(file_store)
-    file_store.close
-    
-    return restore_data
+    try:
+        file_store = open("/home/pi/jupyterLab/TermoBot/BotTermoConf.tt", "rb") 
+        restore_data = pickle.load(file_store)
+        file_store.close
+
+        return restore_data
+    except:
+        print('Fallo cargar los datos')
+        return 'Fallo cargar los datos'
 
 def in_between(now, start, end):
     if start <= end:
@@ -109,14 +146,14 @@ def in_between(now, start, end):
     else: # over midnight e.g., 23:30-04:15
         return start <= now or now < end
 
-
-
-
-dataRestore = load_file_conf()
-oldMsg = dataRestore['mensaje_file']
-hora_prende_termo = dataRestore['hora_prende_file']
-hora_apaga_termo = dataRestore['hora_apaga_file']
-forzar_on = dataRestore['force_on_file']
+try:
+    dataRestore = load_file_conf()
+    oldMsg = dataRestore['mensaje_file']
+    hora_prende_termo = dataRestore['hora_prende_file']
+    hora_apaga_termo = dataRestore['hora_apaga_file']
+    forzar_on = dataRestore['force_on_file']
+except:
+    print('Fallo cargar los datos')
 
 
 time_now = datetime.now(timezone('America/Argentina/Buenos_Aires'))
@@ -145,32 +182,41 @@ while True:
         print(time_now, 'Msg:', oldMsg)
         
         chatID = str(newMsg["user"])
+        commandNot = False
         
         if(oldMsg["msg"].find('/start') != -1):
-            bot_send_text(chatID, bot_token, tutorial()) 
+            bot_send_text(chatID, bot_token, tutorial())
+            commandNot = True
         if(oldMsg["msg"].find('/status') != -1):
             bot_send_text(chatID, bot_token, status_termo(IP_NodeM, hora_prende_termo, hora_apaga_termo))
-            
+            commandNot = True
         if(oldMsg["msg"].find('/ON') != -1):
             bot_send_text(chatID, bot_token, prender_termo(IP_NodeM))
             prender_termo(IP_NodeM)
             print(time_now, 'El termotanque esta prendido')
-            
+            commandNot = True
         if(oldMsg["msg"].find('/OFF') != -1):
             bot_send_text(chatID, bot_token, apagar_termo(IP_NodeM)) 
             print(time_now, 'El termotanque esta prendido')
-            
+            commandNot = True
         if(oldMsg["msg"].find('/setHoraON') != -1):
             hora_prende_termo = datetime.strptime(f'{oldMsg["msg"][11:100][0:2]}:{oldMsg["msg"][11:100][2:4]}', '%H:%M')
             msg_return = f'Joya, prendo el termo a las {hora_prende_termo.strftime("%H:%M")}'
             bot_send_text(chatID, bot_token, msg_return)
+            commandNot = True
         if(oldMsg["msg"].find('/setHoraOFF') != -1):
             hora_apaga_termo = datetime.strptime(f'{oldMsg["msg"][12:100][0:2]}:{oldMsg["msg"][12:100][2:4]}', '%H:%M')
             msg_return = f'Joya, apago el termo a las {hora_apaga_termo.strftime("%H:%M")}'
             bot_send_text(chatID, bot_token, msg_return)
+            commandNot = True
+            
+        if commandNot == False:
+            bot_send_photo(chatID, bot_token)
     
     save_file_conf(oldMsg,hora_prende_termo,hora_apaga_termo, forzar_on)  
-
+    
+   
+    
     #armar rutina de hora
 
 
@@ -180,8 +226,10 @@ while True:
         status_read = True
     if 'El termo esta apagado' in status_readmsg:
         status_read = False
-        
-   
+    if 'No se pudo conectar con el termo' in status_readmsg: 
+        continue
+    
+    
     desfasaje_prende = hora_prende_termo + timedelta(minutes=10)
     desfasaje_apaga = hora_apaga_termo + timedelta(minutes=10)
  
@@ -192,8 +240,10 @@ while True:
     
     if en_tiempo_prende and status_read == False:
         print(time_now, 'El termotanque se prendio')
-        prender_termo(IP_NodeM)
+        print(prender_termo(IP_NodeM))
+        bot_send_text(bot_chatID, bot_token, 'El termo se prendio por la hora') 
     if en_tiempo_apaga and status_read == True:
         print(time_now, 'El termotanque se apago')
-        apagar_termo(IP_NodeM)
+        print(apagar_termo(IP_NodeM))
+        bot_send_text(bot_chatID, bot_token, 'El termo se apago por la hora') 
         
